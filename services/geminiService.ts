@@ -1,11 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ChatMessage } from '../types';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
+// Lazily initialize ai so the app doesn't crash on load if API_KEY is missing.
+let ai: GoogleGenAI | null = null;
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAi = () => {
+  if (!process.env.API_KEY) {
+    return null;
+  }
+  if (!ai) {
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  }
+  return ai;
+};
 
 const promptRefinementSchema = {
   type: Type.OBJECT,
@@ -62,11 +69,20 @@ export const refinePrompt = async (
   currentPrompt: string,
   history: ChatMessage[]
 ): Promise<RefinementResponse> => {
+  const aiInstance = getAi();
+  if (!aiInstance) {
+    console.error("API_KEY is not configured.");
+    return {
+      explanation: "It looks like the API key isn't set up correctly. Please go to your Netlify site settings, find the 'Environment variables' section, and ensure you have a variable with the Key 'API_KEY' and your Gemini API key as the Value. You may need to trigger a new deploy after adding it.",
+      revisedPrompt: currentPrompt,
+    };
+  }
+
   try {
     const latestUserMessage = history[history.length - 1]?.text || initialPrompt;
     const systemInstruction = getSystemInstruction(initialPrompt, currentPrompt, history);
     
-    const response = await ai.models.generateContent({
+    const response = await aiInstance.models.generateContent({
       model: 'gemini-2.5-pro',
       contents: latestUserMessage,
       config: {
@@ -91,7 +107,7 @@ export const refinePrompt = async (
     console.error("Error refining prompt:", error);
     // Provide a user-friendly error response
     return {
-      explanation: "I'm sorry, I encountered an error. This might be due to a temporary issue with the API. Please try again in a moment. If the problem persists, consider simplifying your last message.",
+      explanation: "I'm sorry, I encountered an error. This might be due to a temporary issue with the API or an invalid API key. Please double-check your key in the Netlify settings and try again.",
       revisedPrompt: currentPrompt, // Return the last good prompt
     };
   }
