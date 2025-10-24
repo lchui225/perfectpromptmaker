@@ -103,12 +103,24 @@ export const refinePrompt = async (
     } else {
       throw new Error("Invalid JSON structure in API response.");
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error refining prompt:", error);
-    // Provide a user-friendly error response
+    
+    let userFriendlyError = "I'm sorry, I encountered an unexpected error. Please try again later.";
+
+    const errorMessage = error.toString().toLowerCase();
+
+    if (errorMessage.includes("api key not valid")) {
+        userFriendlyError = "The API key you provided is not valid. Please double-check that the key in your Netlify settings is correct and has no extra spaces or characters, then trigger a new deploy.";
+    } else if (errorMessage.includes("billing")) {
+        userFriendlyError = "It looks like billing is not enabled for the Google Cloud project associated with your API key. The Gemini API requires billing to be set up, even for free tier usage. Please go to your Google AI Studio or Google Cloud Console, enable billing for the project, and then try again.";
+    } else if (errorMessage.includes("quota")) {
+        userFriendlyError = "It seems you have exceeded the free tier quota for the API. Please check your usage in the Google Cloud Console."
+    }
+
     return {
-      explanation: "I'm sorry, I encountered an error. This might be due to a temporary issue with the API or an invalid API key. Please double-check your key in the Netlify settings and try again.",
-      revisedPrompt: currentPrompt, // Return the last good prompt
+      explanation: userFriendlyError,
+      revisedPrompt: currentPrompt,
     };
   }
 };
